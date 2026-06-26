@@ -1,93 +1,67 @@
 import { supabase } from "./supabase.js";
-import { handleAuthRedirect, getSession, loginWithEmail, logout } from "./auth.js";
+import {
+  handleAuthRedirect,
+  loginWithEmail,
+  logout
+} from "./auth.js";
 
-/**
- * Estado global mínimo de auth
- */
 let currentUser = null;
 
 /**
- * INICIALIZACIÓN PRINCIPAL
+ * Loader mientras resolvemos auth
  */
-async function initApp() {
-  try {
-    // 1. Captura redirect de Supabase (magic link)
-    await handleAuthRedirect();
-
-    // 2. Recupera sesión activa
-    const session = await getSession();
-
-    if (session?.user) {
-      currentUser = session.user;
-      console.log("✅ Usuario logueado:", currentUser.email);
-
-      startTripMateApp();
-    } else {
-      console.log("🔒 Usuario no logueado");
-      renderLogin();
-    }
-
-    // 3. Listener de cambios de auth (multi-tab / refresh)
-    supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        currentUser = session.user;
-        startTripMateApp();
-      } else {
-        currentUser = null;
-        renderLogin();
-      }
-    });
-
-  } catch (err) {
-    console.error("Error inicializando app:", err);
-    renderLogin();
-  }
+function renderLoading() {
+  document.getElementById("app").innerHTML = `
+    <div style="text-align:center;padding:60px">
+      <h2>TripMate</h2>
+      <p>Comprobando sesión...</p>
+    </div>
+  `;
 }
 
 /**
- * LOGIN UI SIMPLE
+ * Login
  */
 function renderLogin() {
-  const app = document.getElementById("app");
-
-  app.innerHTML = `
-    <div style="max-width:400px;margin:100px auto;text-align:center">
+  document.getElementById("app").innerHTML = `
+    <div style="max-width:400px;margin:80px auto;text-align:center">
       <h1>✈️ TripMate</h1>
-      <p>Inicia sesión para continuar</p>
+      <p>Accede con tu email</p>
 
-      <input id="email" type="email" placeholder="tu@email.com"
-        style="padding:10px;width:100%;margin-top:10px"/>
+      <input id="email" type="email"
+        placeholder="tu@email.com"
+        style="padding:12px;width:100%;margin-top:10px" />
 
       <button id="loginBtn"
-        style="padding:10px;width:100%;margin-top:10px">
+        style="padding:12px;width:100%;margin-top:12px">
         Enviar enlace
       </button>
     </div>
   `;
 
   document.getElementById("loginBtn").onclick = async () => {
-    const email = document.getElementById("email").value;
+    const email = document.getElementById("email").value.trim();
 
-    if (!email) return alert("Introduce un email");
+    if (!email) {
+      alert("Introduce un email");
+      return;
+    }
 
     const { error } = await loginWithEmail(email);
 
     if (error) {
-      alert("Error: " + error.message);
+      alert(error.message);
     } else {
-      alert("Revisa tu correo 📩");
+      alert("Te hemos enviado un enlace al correo.");
     }
   };
 }
 
 /**
- * APP PRINCIPAL (TU APLICACIÓN REAL)
- * Aquí conectas tu código actual de TripMate
+ * App principal
  */
-function startTripMateApp() {
-  const app = document.getElementById("app");
-
-  app.innerHTML = `
+function renderApp() {
+  document.getElementById("app").innerHTML = `
     <div style="padding:20px">
       <h2>✈️ TripMate</h2>
       <p>Bienvenido ${currentUser.email}</p>
@@ -96,9 +70,8 @@ function startTripMateApp() {
 
       <hr/>
 
-      <div id="tripApp">
-        <!-- AQUÍ MONTAS TU APP ACTUAL -->
-        App cargada correctamente 🚀
+      <div class="card">
+        Tu panel de viajes irá aquí.
       </div>
     </div>
   `;
@@ -106,12 +79,39 @@ function startTripMateApp() {
   document.getElementById("logoutBtn").onclick = async () => {
     await logout();
   };
-
-  // 👉 aquí puedes llamar a tu render original si lo tienes separado:
-  // initTripMateUI();
 }
 
 /**
- * BOOT
+ * Init
  */
+async function initApp() {
+  renderLoading();
+
+  // Captura magic link si existe
+  await handleAuthRedirect();
+
+  // Espera a recuperar sesión persistida
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+
+  if (session?.user) {
+    currentUser = session.user;
+    renderApp();
+  } else {
+    renderLogin();
+  }
+
+  // Escuchar cambios en auth
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (session?.user) {
+      currentUser = session.user;
+      renderApp();
+    } else {
+      currentUser = null;
+      renderLogin();
+    }
+  });
+}
+
 initApp();
