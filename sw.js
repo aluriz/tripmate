@@ -1,17 +1,18 @@
-const CACHE_NAME = "tripmate-v1";
+const CACHE_NAME = "tripmate-v2";
 
 const ASSETS = [
   "./",
   "./index.html",
-  "./manifest.json"
+  "./manifest.json",
+  "./core/app.js",
+  "./core/auth.js",
+  "./core/supabase.js"
 ];
 
 // INSTALL
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
   );
   self.skipWaiting();
 });
@@ -22,7 +23,9 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys.map((key) => {
-          if (key !== CACHE_NAME) return caches.delete(key);
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
         })
       )
     )
@@ -30,11 +33,32 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// FETCH (offline fallback)
+// FETCH
 self.addEventListener("fetch", (event) => {
   const req = event.request;
+  const url = new URL(req.url);
+
+  /**
+   * NO interceptar Supabase auth
+   */
+  if (
+    url.pathname.includes("/auth") ||
+    url.hostname.includes("supabase.co")
+  ) {
+    return;
+  }
 
   event.respondWith(
-    fetch(req).catch(() => caches.match(req).then((res) => res || caches.match("./index.html")))
+    caches.match(req).then((cached) => {
+      if (cached) return cached;
+
+      return fetch(req)
+        .then((response) => {
+          return response;
+        })
+        .catch(() => {
+          return caches.match("./index.html");
+        });
+    })
   );
 });
