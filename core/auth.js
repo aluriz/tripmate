@@ -1,40 +1,36 @@
 import { supabase } from "./supabase.js";
 
 /**
- * Captura el login desde el redirect de Supabase
- * (MUY IMPORTANTE para GitHub Pages + magic link)
+ * Procesa el hash de Supabase después del magic link
  */
 export async function handleAuthRedirect() {
-  const { error } = await supabase.auth.getSessionFromUrl({
-    storeSession: true,
-  });
+  const hash = window.location.hash;
 
-  if (error) {
-    console.error("Error procesando login:", error.message);
-    return null;
+  // Si viene token en la URL, Supabase v2 lo detecta solo
+  if (hash.includes("access_token")) {
+    console.log("Magic link detectado");
+
+    // Esperamos a que Supabase procese la sesión
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Limpiamos la URL
+    window.history.replaceState(
+      {},
+      document.title,
+      window.location.pathname
+    );
   }
-
-  const { data: { session } } = await supabase.auth.getSession();
-  return session;
 }
 
 /**
- * Devuelve sesión actual
- */
-export async function getSession() {
-  const { data } = await supabase.auth.getSession();
-  return data.session;
-}
-
-/**
- * Login por email (magic link)
+ * Login por email
  */
 export async function loginWithEmail(email) {
   return await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: "https://aluriz.github.io/tripmate/",
-    },
+      emailRedirectTo: "https://aluriz.github.io/tripmate/"
+    }
   });
 }
 
