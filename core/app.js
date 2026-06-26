@@ -7,9 +7,6 @@ import {
 
 let currentUser = null;
 
-/**
- * Loader mientras resolvemos auth
- */
 function renderLoading() {
   document.getElementById("app").innerHTML = `
     <div style="text-align:center;padding:60px">
@@ -19,9 +16,6 @@ function renderLoading() {
   `;
 }
 
-/**
- * Login
- */
 function renderLogin() {
   document.getElementById("app").innerHTML = `
     <div style="max-width:400px;margin:80px auto;text-align:center">
@@ -57,9 +51,6 @@ function renderLogin() {
   };
 }
 
-/**
- * App principal
- */
 function renderApp() {
   document.getElementById("app").innerHTML = `
     <div style="padding:20px">
@@ -71,7 +62,7 @@ function renderApp() {
       <hr/>
 
       <div class="card">
-        Tu panel de viajes irá aquí.
+        App cargada correctamente 🚀
       </div>
     </div>
   `;
@@ -81,19 +72,21 @@ function renderApp() {
   };
 }
 
-/**
- * Init
- */
 async function initApp() {
   renderLoading();
 
-  // Captura magic link si existe
   await handleAuthRedirect();
 
-  // Espera a recuperar sesión persistida
   const {
-    data: { session }
+    data: { session },
+    error
   } = await supabase.auth.getSession();
+
+  if (error) {
+    console.error(error);
+    renderLogin();
+    return;
+  }
 
   if (session?.user) {
     currentUser = session.user;
@@ -102,8 +95,9 @@ async function initApp() {
     renderLogin();
   }
 
-  // Escuchar cambios en auth
   supabase.auth.onAuthStateChange((event, session) => {
+    console.log("Auth event:", event);
+
     if (session?.user) {
       currentUser = session.user;
       renderApp();
