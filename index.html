@@ -6,19 +6,15 @@
 <title>TripMate Pro</title>
 
 <!-- PWA -->
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#007AFF">
 
-<!-- iOS PWA -->
+<!-- iOS -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="TripMate Pro">
 
-<!-- ICONO (opcional pero recomendado) -->
-<link rel="apple-touch-icon" href="icons/icon-192.png">
-
-<!-- SOLO MODERN SUPABASE (NO SCRIPT GLOBAL) -->
-<!-- (IMPORTANTE: no uses script supabase global si usas ESM) -->
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
 
 <style>
 body{
@@ -51,15 +47,30 @@ button{
 
 <div id="app">Loading TripMate...</div>
 
-<!-- APP -->
+<script>
+/**
+ * MUY IMPORTANTE:
+ * Si Supabase vuelve con #access_token
+ * dejamos la URL intacta para que app.js la procese.
+ * NO hacer replaceState aquí.
+ */
+console.log("TripMate boot:", window.location.href);
+</script>
+
+<!-- APP PRINCIPAL -->
 <script type="module" src="./core/app.js"></script>
 
 <!-- SERVICE WORKER -->
 <script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js')
-    .then(() => console.log('SW registrado'))
-    .catch(err => console.error('SW error:', err));
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("./sw.js");
+      console.log("SW registrado", reg);
+    } catch (err) {
+      console.error("SW error:", err);
+    }
+  });
 }
 </script>
 
