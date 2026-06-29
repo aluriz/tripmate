@@ -1,243 +1,200 @@
 import { supabase } from "./supabase.js";
 
-/* =========================
-STATE
-========================= */
+/**
+ * APP STATE
+ */
 const state = {
   user: null,
-  trips: [],
-  currentTrip: null,
-  expenses: [],
-  files: []
+  loading: true,
+  trips: []
 };
 
-/* =========================
-INIT
-========================= */
-window.addEventListener("DOMContentLoaded", init);
+/**
+ * INIT APP
+ */
+document.addEventListener("DOMContentLoaded", async () => {
+  await initApp();
+});
 
-async function init() {
-  const { data } = await supabase.auth.getSession();
-  state.user = data.session?.user || null;
+/**
+ * BOOTSTRAP
+ */
+async function initApp() {
+  try {
+    renderLoading();
 
-  supabase.auth.onAuthStateChange((_e, session) => {
+    // 1. Capturar sesión desde redirect (MAGIC LINK FIX CRÍTICO)
+    const { data: urlSession } = await supabase.auth.getSession();
+
+    // 2. Si no hay sesión, intentar recuperar sesión activa
+    const { data: { session } } = await supabase.auth.getSession();
+
     state.user = session?.user || null;
-    render();
-  });
 
-  if (state.user) await loadTrips();
+    // 3. Escuchar cambios auth en tiempo real
+    supabase.auth.onAuthStateChange((_event, session) => {
+      state.user = session?.user || null;
+      route();
+    });
 
-  render();
+    state.loading = false;
+
+    // 4. Primera ruta
+    route();
+
+  } catch (err) {
+    console.error("INIT ERROR:", err);
+    renderError(err.message);
+  }
 }
 
-/* =========================
-AUTH
-========================= */
-async function login(email) {
-  await supabase.auth.signInWithOtp({
+/**
+ * ROUTER SIMPLE
+ */
+function route() {
+  if (state.loading) return renderLoading();
+
+  if (!state.user) {
+    return renderLogin();
+  }
+
+  return renderApp();
+}
+
+/**
+ * LOGIN UI
+ */
+function renderLogin() {
+  document.getElementById("app").innerHTML = `
+    <div style="max-width:400px;margin:60px auto;text-align:center">
+      <h1>TripMate</h1>
+      <p>Inicia sesión con tu email</p>
+
+      <input id="email" placeholder="tu@email.com"
+        style="padding:10px;width:100%;margin-top:10px"/>
+
+      <button onclick="sendMagicLink()"
+        style="margin-top:10px;width:100%">
+        Enviar enlace
+      </button>
+    </div>
+  `;
+}
+
+/**
+ * APP PRINCIPAL
+ */
+function renderApp() {
+  document.getElementById("app").innerHTML = `
+    <div style="max-width:900px;margin:20px auto">
+      <h2>Hola 👋 ${state.user.email}</h2>
+
+      <button onclick="logout()">Cerrar sesión</button>
+
+      <hr/>
+
+      <h3>Tus viajes</h3>
+
+      <div id="trips">
+        ${state.trips.length ? state.trips.map(t => `
+          <div class="card">
+            <b>${t.name}</b><br/>
+            ${t.destination || ""}
+          </div>
+        `).join("") : "<p>No hay viajes aún</p>"}
+      </div>
+
+      <button onclick="createTrip()">+ Crear viaje</button>
+    </div>
+  `;
+
+  loadTrips();
+}
+
+/**
+ * LOAD TRIPS (SUPABASE)
+ */
+async function loadTrips() {
+  const { data, error } = await supabase
+    .from("trips")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  state.trips = data || [];
+  renderApp();
+}
+
+/**
+ * CREATE TRIP
+ */
+window.createTrip = async function () {
+  const name = prompt("Nombre del viaje:");
+  if (!name) return;
+
+  const { error } = await supabase.from("trips").insert({
+    id: crypto.randomUUID(),
+    name,
+    owner_id: state.user.id,
+    created_at: Date.now()
+  });
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  loadTrips();
+};
+
+/**
+ * MAGIC LINK LOGIN
+ */
+window.sendMagicLink = async function () {
+  const email = document.getElementById("email").value;
+
+  const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
       emailRedirectTo: "https://aluriz.github.io/tripmate/"
     }
   });
 
-  alert("Revisa tu email 📩");
-}
-
-async function logout() {
-  await supabase.auth.signOut();
-}
-
-/* =========================
-TRIPS
-========================= */
-async function loadTrips() {
-  const { data } = await supabase
-    .from("trips")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  state.trips = data || [];
-}
-
-async function createTrip() {
-  const name = prompt("Nombre del viaje");
-
-  const { data, error } = await supabase
-    .from("trips")
-    .insert({
-      name,
-      owner_id: state.user.id
-    })
-    .select()
-    .single();
-
-  if (error) return alert(error.message);
-
-  state.trips.unshift(data);
-  render();
-}
-
-async function selectTrip(id) {
-  state.currentTrip = id;
-
-  await loadExpenses();
-  await loadFiles();
-
-  subscribeRealtime(id);
-
-  render();
-}
-
-/* =========================
-EXPENSES
-========================= */
-async function loadExpenses() {
-  const { data } = await supabase
-    .from("expenses")
-    .select("*")
-    .eq("trip_id", state.currentTrip);
-
-  state.expenses = data || [];
-}
-
-async function addExpense() {
-  const description = prompt("Descripción");
-  const amount = parseFloat(prompt("Importe"));
-
-  await supabase.from("expenses").insert({
-    trip_id: state.currentTrip,
-    description,
-    amount,
-    user_id: state.user.id
-  });
-
-  loadExpenses();
-}
-
-/* =========================
-FILES (Storage)
-========================= */
-async function uploadFile(file) {
-  const path = `${state.currentTrip}/${Date.now()}-${file.name}`;
-
-  await supabase.storage
-    .from("trip-files")
-    .upload(path, file);
-
-  const { data } = supabase.storage
-    .from("trip-files")
-    .getPublicUrl(path);
-
-  await supabase.from("files").insert({
-    id: crypto.randomUUID(),
-    trip_id: state.currentTrip,
-    name: file.name,
-    url: data.publicUrl,
-    user_id: state.user.id
-  });
-
-  loadFiles();
-}
-
-async function loadFiles() {
-  const { data } = await supabase
-    .from("files")
-    .select("*")
-    .eq("trip_id", state.currentTrip);
-
-  state.files = data || [];
-}
-
-/* =========================
-REALTIME
-========================= */
-function subscribeRealtime(tripId) {
-  supabase.removeAllChannels();
-
-  supabase.channel("expenses")
-    .on("postgres_changes", {
-      event: "*",
-      schema: "public",
-      table: "expenses",
-      filter: `trip_id=eq.${tripId}`
-    }, loadExpenses)
-    .subscribe();
-
-  supabase.channel("files")
-    .on("postgres_changes", {
-      event: "*",
-      schema: "public",
-      table: "files",
-      filter: `trip_id=eq.${tripId}`
-    }, loadFiles)
-    .subscribe();
-}
-
-/* =========================
-UI SIMPLE MVP
-========================= */
-function render() {
-  const el = document.getElementById("app");
-
-  if (!state.user) {
-    el.innerHTML = `
-      <h2>Login</h2>
-      <input id="email" placeholder="email"/>
-      <button onclick="login()">Entrar</button>
-    `;
-
-    window.login = () => {
-      login(document.getElementById("email").value);
-    };
-
-    return;
+  if (error) {
+    alert(error.message);
+  } else {
+    alert("Revisa tu email 📩");
   }
+};
 
-  el.innerHTML = `
-    <button onclick="logout()">Logout</button>
+/**
+ * LOGOUT
+ */
+window.logout = async function () {
+  await supabase.auth.signOut();
+  state.user = null;
+  route();
+};
 
-    <h2>Trips</h2>
-
-    ${state.trips.map(t => `
-      <div class="card" onclick="selectTrip('${t.id}')">
-        ${t.name}
-      </div>
-    `).join("")}
-
-    <button onclick="createTrip()">+ Trip</button>
-
-    <hr/>
-
-    <h3>Expenses</h3>
-
-    ${state.expenses.map(e => `
-      <div class="card">${e.description} - ${e.amount}€</div>
-    `).join("")}
-
-    <button onclick="addExpense()">+ Expense</button>
-
-    <hr/>
-
-    <h3>Files</h3>
-
-    <input type="file" id="file"/>
-    <button onclick="upload()">Upload</button>
-
-    ${state.files.map(f => `
-      <div class="card">
-        <a href="${f.url}" target="_blank">${f.name}</a>
-      </div>
-    `).join("")}
+/**
+ * UI HELPERS
+ */
+function renderLoading() {
+  document.getElementById("app").innerHTML = `
+    <div style="text-align:center;margin-top:80px">
+      <h3>Loading TripMate...</h3>
+    </div>
   `;
+}
 
-  window.logout = logout;
-  window.createTrip = createTrip;
-  window.selectTrip = selectTrip;
-  window.addExpense = addExpense;
-
-  window.upload = async () => {
-    const file = document.getElementById("file").files[0];
-    if (file) uploadFile(file);
-  };
+function renderError(msg) {
+  document.getElementById("app").innerHTML = `
+    <div style="color:red;text-align:center;margin-top:80px">
+      Error: ${msg}
+    </div>
+  `;
 }
