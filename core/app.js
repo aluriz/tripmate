@@ -1,4 +1,5 @@
 import { supabase } from "./supabase.js";
+import { subscribeToTrips } from "./realtime.js";
 
 const state = {
   user: null,
@@ -31,6 +32,11 @@ async function boot() {
     state.user = session?.user || null;
     render();
   });
+
+  subscribeToTrips(async () => {
+    await loadTrips();
+  });
+
 
   render();
 }
