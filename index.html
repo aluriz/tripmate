@@ -3,25 +3,17 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>TripMate Pro</title>
+<title>TripMate</title>
 
-<!-- PWA -->
-<link rel="manifest" href="./manifest.json">
+<link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#007AFF">
-
-<!-- iOS -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="TripMate Pro">
-
-<link rel="apple-touch-icon" href="./icons/icon-192.png">
 
 <style>
 body{
-  font-family:-apple-system, system-ui, sans-serif;
-  background:#f2f2f7;
+  font-family:-apple-system, system-ui;
   margin:0;
-  padding:20px;
+  background:#f2f2f7;
+  padding:16px;
 }
 
 .card{
@@ -32,45 +24,33 @@ body{
 }
 
 button{
-  padding:10px 14px;
-  margin:5px;
-  border-radius:10px;
-  border:none;
   background:#007AFF;
-  color:white;
+  color:#fff;
+  border:none;
+  padding:10px 14px;
+  border-radius:10px;
   font-weight:600;
+}
+
+input{
+  width:100%;
+  padding:10px;
+  margin:6px 0;
+  border-radius:10px;
+  border:1px solid #ddd;
 }
 </style>
 </head>
 
 <body>
 
-<div id="app">Loading TripMate...</div>
+<div id="app">Loading...</div>
 
-<script>
-/**
- * MUY IMPORTANTE:
- * Si Supabase vuelve con #access_token
- * dejamos la URL intacta para que app.js la procese.
- * NO hacer replaceState aquí.
- */
-console.log("TripMate boot:", window.location.href);
-</script>
-
-<!-- APP PRINCIPAL -->
 <script type="module" src="./core/app.js"></script>
 
-<!-- SERVICE WORKER -->
 <script>
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", async () => {
-    try {
-      const reg = await navigator.serviceWorker.register("./sw.js");
-      console.log("SW registrado", reg);
-    } catch (err) {
-      console.error("SW error:", err);
-    }
-  });
+  navigator.serviceWorker.register("./sw.js");
 }
 </script>
 
