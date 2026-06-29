@@ -1,92 +1,71 @@
 import { supabase } from "./supabase.js";
 
-/**
- * APP STATE
- */
 const state = {
   user: null,
   loading: true,
   trips: []
 };
 
-/**
- * INIT APP
- */
 document.addEventListener("DOMContentLoaded", async () => {
-  await initApp();
+  await boot();
 });
 
 /**
- * BOOTSTRAP
+ * BOOT
  */
-async function initApp() {
-  try {
-    renderLoading();
+async function boot() {
+  renderLoading();
 
-    // 1. Capturar sesión desde redirect (MAGIC LINK FIX CRÍTICO)
-    const { data: urlSession } = await supabase.auth.getSession();
-
-    // 2. Si no hay sesión, intentar recuperar sesión activa
-    const { data: { session } } = await supabase.auth.getSession();
-
-    state.user = session?.user || null;
-
-    // 3. Escuchar cambios auth en tiempo real
-    supabase.auth.onAuthStateChange((_event, session) => {
-      state.user = session?.user || null;
-      route();
-    });
-
-    state.loading = false;
-
-    // 4. Primera ruta
-    route();
-
-  } catch (err) {
-    console.error("INIT ERROR:", err);
-    renderError(err.message);
+  // limpiar redirect hash de magic link
+  if (window.location.hash.includes("access_token")) {
+    await supabase.auth.getSession();
+    window.history.replaceState({}, document.title, "/tripmate/");
   }
+
+  const { data: { session } } = await supabase.auth.getSession();
+
+  state.user = session?.user || null;
+  state.loading = false;
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    state.user = session?.user || null;
+    render();
+  });
+
+  render();
 }
 
 /**
- * ROUTER SIMPLE
+ * RENDER CENTRAL (IMPORTANTE)
  */
-function route() {
+function render() {
   if (state.loading) return renderLoading();
-
-  if (!state.user) {
-    return renderLogin();
-  }
-
+  if (!state.user) return renderLogin();
   return renderApp();
 }
 
 /**
- * LOGIN UI
+ * LOGIN
  */
 function renderLogin() {
   document.getElementById("app").innerHTML = `
     <div style="max-width:400px;margin:60px auto;text-align:center">
       <h1>TripMate</h1>
-      <p>Inicia sesión con tu email</p>
 
-      <input id="email" placeholder="tu@email.com"
-        style="padding:10px;width:100%;margin-top:10px"/>
+      <input id="email" placeholder="tu@email.com" />
 
-      <button onclick="sendMagicLink()"
-        style="margin-top:10px;width:100%">
-        Enviar enlace
-      </button>
+      <button onclick="sendMagicLink()">Enviar enlace</button>
     </div>
   `;
 }
 
 /**
- * APP PRINCIPAL
+ * APP
  */
 function renderApp() {
   document.getElementById("app").innerHTML = `
     <div style="max-width:900px;margin:20px auto">
+
       <h2>Hola 👋 ${state.user.email}</h2>
 
       <button onclick="logout()">Cerrar sesión</button>
@@ -96,15 +75,19 @@ function renderApp() {
       <h3>Tus viajes</h3>
 
       <div id="trips">
-        ${state.trips.length ? state.trips.map(t => `
-          <div class="card">
-            <b>${t.name}</b><br/>
-            ${t.destination || ""}
-          </div>
-        `).join("") : "<p>No hay viajes aún</p>"}
+        ${state.trips.length
+          ? state.trips.map(t => `
+            <div class="card">
+              <b>${t.name}</b><br/>
+              ${t.destination || ""}
+            </div>
+          `).join("")
+          : "<p>No hay viajes aún</p>"
+        }
       </div>
 
       <button onclick="createTrip()">+ Crear viaje</button>
+
     </div>
   `;
 
@@ -112,7 +95,7 @@ function renderApp() {
 }
 
 /**
- * LOAD TRIPS (SUPABASE)
+ * LOAD TRIPS (SIN RE-RENDER LOOP)
  */
 async function loadTrips() {
   const { data, error } = await supabase
@@ -126,7 +109,19 @@ async function loadTrips() {
   }
 
   state.trips = data || [];
-  renderApp();
+
+  // SOLO ACTUALIZAMOS DOM, NO re-render completo
+  const container = document.getElementById("trips");
+  if (container) {
+    container.innerHTML = state.trips.length
+      ? state.trips.map(t => `
+        <div class="card">
+          <b>${t.name}</b><br/>
+          ${t.destination || ""}
+        </div>
+      `).join("")
+      : "<p>No hay viajes aún</p>";
+  }
 }
 
 /**
@@ -148,11 +143,11 @@ window.createTrip = async function () {
     return;
   }
 
-  loadTrips();
+  await loadTrips();
 };
 
 /**
- * MAGIC LINK LOGIN
+ * LOGIN MAGIC LINK
  */
 window.sendMagicLink = async function () {
   const email = document.getElementById("email").value;
@@ -164,11 +159,8 @@ window.sendMagicLink = async function () {
     }
   });
 
-  if (error) {
-    alert(error.message);
-  } else {
-    alert("Revisa tu email 📩");
-  }
+  if (error) alert(error.message);
+  else alert("Revisa tu email 📩");
 };
 
 /**
@@ -177,24 +169,16 @@ window.sendMagicLink = async function () {
 window.logout = async function () {
   await supabase.auth.signOut();
   state.user = null;
-  route();
+  render();
 };
 
 /**
- * UI HELPERS
+ * UI
  */
 function renderLoading() {
   document.getElementById("app").innerHTML = `
     <div style="text-align:center;margin-top:80px">
       <h3>Loading TripMate...</h3>
-    </div>
-  `;
-}
-
-function renderError(msg) {
-  document.getElementById("app").innerHTML = `
-    <div style="color:red;text-align:center;margin-top:80px">
-      Error: ${msg}
     </div>
   `;
 }
